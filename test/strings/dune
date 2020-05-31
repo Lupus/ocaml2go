@@ -1,0 +1,6 @@
+(executable
+  (name strings)
+  (package test)
+  (public_name strings.exe)
+  (modes byte)
+)

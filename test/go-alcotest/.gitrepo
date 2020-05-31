@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/mirage/alcotest.git
+	branch = master
+	commit = c9d4210fdbf3f75a761111ddc9a77a6dfb805e9b
+	parent = 9b81379ef86981cf7914eaac9a8b663fed34a45b
+	method = merge
+	cmdver = 0.4.0

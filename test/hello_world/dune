@@ -1,0 +1,6 @@
+(executable
+  (name hello_world)
+  (package test)
+  (public_name hello_world.exe)
+  (modes byte)
+)

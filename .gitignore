@@ -1,0 +1,6 @@
+_build
+_opam
+.merlin
+node_modules
+.vscode
+

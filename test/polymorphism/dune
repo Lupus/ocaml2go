@@ -1,0 +1,6 @@
+(executable
+  (name polymorphism)
+  (package test)
+  (public_name polymorphism.exe)
+  (modes byte)
+)

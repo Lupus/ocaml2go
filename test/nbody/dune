@@ -1,0 +1,6 @@
+(executable
+  (name nbody)
+  (package test)
+  (public_name nbody.exe)
+  (modes byte)
+)

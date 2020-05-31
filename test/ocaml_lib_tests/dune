@@ -1,0 +1,6 @@
+(executable
+  (name ocaml_lib_tests)
+  (package test)
+  (public_name ocaml_lib_tests.exe)
+  (modes byte)
+)

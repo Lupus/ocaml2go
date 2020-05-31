@@ -1,0 +1,11 @@
+(executable
+  (name hindley_milner_lang)
+  (package test)
+  (public_name hindley_milner_lang.exe)
+  (libraries menhirLib sedlex)
+  (preprocess (pps sedlex.ppx))
+  (modes byte)
+)
+
+(menhir
+ (modules parser))

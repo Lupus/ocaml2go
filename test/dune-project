@@ -1,0 +1,6 @@
+(lang dune 2.4)
+(name test)
+(generate_opam_files true)
+(package
+ (name test))
+(using menhir 2.1)

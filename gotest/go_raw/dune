@@ -1,0 +1,16 @@
+(executable
+ (name go_raw)
+ (modules go_raw)
+ (libraries time uuid)
+ (flags :standard -no-check-prims)
+ (modes byte))
+
+(library
+ (name time)
+ (modules time)
+ (modes byte))
+
+(library
+ (name uuid)
+ (modules uuid)
+ (modes byte))

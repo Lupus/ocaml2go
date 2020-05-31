@@ -1,0 +1,5 @@
+(lang dune 2.4)
+(name gotest)
+(generate_opam_files true)
+(package
+ (name gotest))

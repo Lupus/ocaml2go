@@ -1,0 +1,6 @@
+(executable
+ (public_name ocaml2go)
+ (name main)
+ (libraries base ppxlib sexplib js_of_ocaml-compiler ocaml2go)
+ (preprocess
+  (pps ppx_sexp_conv ppxlib.traverse)))

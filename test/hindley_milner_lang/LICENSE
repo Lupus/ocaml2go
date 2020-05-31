@@ -1,0 +1,4 @@
+Unfortunately I'm not sure about the license for this code, original
+repository contained no information regarding licensing. It was taken from
+https://github.com/prakhar1989/type-inference, converted to Reason (for my
+convenience), and edited a bit so that it can be used as a test for ocaml2go.

@@ -1,0 +1,5 @@
+(executable
+ (name bindgen)
+ (libraries base)
+ (ocamlc_flags :standard -no-check-prims)
+ (modes byte))

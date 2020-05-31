@@ -1,0 +1,6 @@
+(executable
+  (name loop_labels)
+  (package test)
+  (public_name loop_labels.exe)
+  (modes byte)
+)

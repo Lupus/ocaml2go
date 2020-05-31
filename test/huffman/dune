@@ -1,0 +1,7 @@
+(executable
+  (name huffman)
+  (package test)
+  (public_name huffman.exe)
+  (modes byte)
+)
+

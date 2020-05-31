@@ -1,0 +1,6 @@
+(executable
+  (name mutual_references)
+  (package test)
+  (public_name mutual_references.exe)
+  (modes byte)
+)

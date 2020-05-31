@@ -1,0 +1,6 @@
+(library
+ (name ocaml2go_expect_tests)
+ (inline_tests)
+ (libraries base parsexp ocaml2go)
+ (preprocess
+  (pps ppx_expect)))

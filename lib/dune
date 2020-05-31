@@ -1,0 +1,8 @@
+(library
+ (inline_tests)
+ (name ocaml2go)
+ (libraries base stdio ppxlib ppxlib.traverse_builtins sexplib fmt
+   js_of_ocaml-compiler)
+ (flags -open Base)
+ (preprocess
+  (pps ppx_inline_test ppx_sexp_conv ppx_custom_printf ppxlib.traverse)))

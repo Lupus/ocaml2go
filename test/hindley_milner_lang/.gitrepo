@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/git-commands/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/prakhar1989/type-inference.git
+	branch = master
+	commit = 1b31cc9dc05fca41d089517e54edbf66a8012512
+	parent = 467b1b5e4a22465db51093dc96de0f60266de099
+	method = merge
+	cmdver = 0.4.0
