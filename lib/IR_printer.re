@@ -64,12 +64,15 @@ let pp_binop = f =>
   | BFloatMod => Fmt.pf(f, "(mod.)");
 
 let pp_formal_parameter_list = (f, l) =>
-  Fmt.pf(f, "@[<h>%a@]", Fmt.(list(~sep=comma, string)), l);
+  List.map(l, ~f=((name, _)) => name)
+  |> Fmt.pf(f, "@[<h>%a@]", Fmt.(list(~sep=comma, string)));
 
 let pp_locals = f =>
   fun
   | [] => ()
-  | l => Fmt.pf(f, "vars @[%a@]@,", Fmt.(list(~sep=comma, string)), l);
+  | l =>
+    List.map(l, ~f=((name, _)) => name)
+    |> Fmt.pf(f, "vars @[%a@]@,", Fmt.(list(~sep=comma, string)));
 
 let escape_string = s =>
   s
@@ -148,8 +151,8 @@ and pp_etag = (f, {etag_tag, etag_items}) =>
 and pp_eun = (f, {eun_op, eun_expr}) =>
   Fmt.pf(f, "%a(%a)", pp_unop, eun_op, pp_expression, eun_expr)
 
-and pp_expression = f =>
-  fun
+and pp_expression = (f, e) =>
+  switch (e.expr_desc) {
   | ERaw(_) => Fmt.pf(f, "%%ERAW%%")
   | ESeq((e1, e2)) =>
     Fmt.pf(f, "(%a, %a)", pp_expression, e1, pp_expression, e2)
@@ -178,6 +181,7 @@ and pp_expression = f =>
   | ECustomRegister(e) => Fmt.pf(f, "$custom_register(%a)", pp_expression, e)
   | ERequire(r) => Fmt.pf(f, "$require(%s)", r)
   | ERuntime => Fmt.pf(f, "runtime")
+  }
 
 and pp_function_declaration =
     (f, {name, func: {params, locals, loc: _, body}}) =>
@@ -205,11 +209,12 @@ and pp_function_expression = (f, {params, locals, loc, body}) =>
     body,
   )
 
-and pp_lvalue = f =>
-  fun
+and pp_lvalue = (f, lv) =>
+  switch (lv.lv_desc) {
   | LVar(s) => Fmt.pf(f, "%s", s)
   | LArrAccess(earr_access) => pp_earr_access(f, earr_access)
   | LStructAccess(estruct_access) => pp_estruct_access(f, estruct_access)
+  }
 
 and pp_sassign = (f, {sassign_lvalue, sassign_expr}) =>
   Fmt.pf(f, "%a = %a", pp_lvalue, sassign_lvalue, pp_expression, sassign_expr)

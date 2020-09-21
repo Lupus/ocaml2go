@@ -177,81 +177,92 @@ and from_element_list = lst =>
       | Some(e) => from_expression(e)
       | None => failwith("None is unsupported in element list"),
   )
-and from_expression = e =>
-  switch (e) {
-  | Rehp.ECall(e, args, _loc) =>
-    IR.ECall({
-      ecall_expr: from_expression(e),
-      ecall_args: from_arguments(args),
-    })
-  | EVar(ident) => EVar(ident |> string_of_id)
-  | EBool(b) => EBool(b)
-  | EFloat(flt) => EFloat(flt)
-  | EInt(i) => EInt(i)
-  | EStr(s, `Bytes) => EStr({estr_lit: s, estr_kind: Bytes})
-  | EStr(s, `Utf8) => EStr({estr_lit: s, estr_kind: Utf8})
-  | EStruct(items) => EStruct(items |> List.map(~f=from_expression))
-  | EArr(arr_literal) => EArr(arr_literal |> from_element_list)
-  | ETag(tag, itms) =>
-    ETag({etag_tag: tag, etag_items: itms |> from_arguments})
-  | EAccess(e1, e2) =>
-    EAccess({
-      eacc_expr: e1 |> from_expression,
-      eacc_index: e2 |> from_expression,
-    })
-  | EStructAccess(e1, i) =>
-    EStructAccess({estruct_expr: e1 |> from_expression, estruct_index: i})
-  | EArrAccess(e1, e2) =>
-    EArrAccess({
-      earr_expr: e1 |> from_expression,
-      earr_index: e2 |> from_expression,
-    })
-  | EBin(binop, e1, e2) =>
-    EBin({
-      ebin_op: binop |> from_binop,
-      ebin_lhs: e1 |> from_expression,
-      ebin_rhs: e2 |> from_expression,
-    })
-  | ECond(e1, e2, e3) =>
-    ECond({
-      econd_test: e1 |> from_expression,
-      econd_success: e2 |> from_expression,
-      econd_failure: e3 |> from_expression,
-    })
-  | EArityTest(e) => EArityTest(e |> from_expression)
-  | EVectlength(e) => EVectlength(e |> from_expression)
-  | EArrLen(e) => EArrLen(e |> from_expression)
-  | EDot(e, ident) => EDot({edot_expr: e |> from_expression, edot_id: ident})
-  | EUn(unop, e) =>
-    EUn({eun_op: unop |> from_unop, eun_expr: e |> from_expression})
-  | EFun((None, ident_lst, body, loc)) =>
-    EFun({
-      params: ident_lst |> List.map(~f=string_of_id),
-      locals: var_hoist_source_elements(body),
-      body: body |> from_function_body,
-      loc: from_loc(loc),
-    })
-  | ESeq(e1, e2) => ESeq((e1 |> from_expression, e2 |> from_expression))
-  | ERaw(segments) => ERaw(segments |> from_segment_list)
-  | ERequire(str) => ERequire(str)
-  | ECustomRequire(str) => ECustomRequire(str)
-  | ECustomRegister(e) => ECustomRegister(from_expression(e))
-  | ERuntime => ERuntime
-  | ECopy(e, _loc) => ECopy(from_expression(e))
-  | _ => failwith("unsupported expression")
-  }
-and from_lvalue = e =>
-  switch (e) {
-  | Rehp.EVar(ident) => IR.LVar(ident |> string_of_id)
-  | EStructAccess(e1, i) =>
-    LStructAccess({estruct_expr: e1 |> from_expression, estruct_index: i})
-  | EArrAccess(e1, e2) =>
-    LArrAccess({
-      earr_expr: e1 |> from_expression,
-      earr_index: e2 |> from_expression,
-    })
-  | _ => failwith("unsupported lvalue")
-  }
+and from_expression = e => {
+  let expr_desc =
+    switch (e) {
+    | Rehp.ECall(e, args, _loc) =>
+      IR.ECall({
+        ecall_expr: from_expression(e),
+        ecall_args: from_arguments(args),
+      })
+    | EVar(ident) => EVar(ident |> string_of_id)
+    | EBool(b) => EBool(b)
+    | EFloat(flt) => EFloat(flt)
+    | EInt(i) => EInt(i)
+    | EStr(s, `Bytes) => EStr({estr_lit: s, estr_kind: Bytes})
+    | EStr(s, `Utf8) => EStr({estr_lit: s, estr_kind: Utf8})
+    | EStruct(items) => EStruct(items |> List.map(~f=from_expression))
+    | EArr(arr_literal) => EArr(arr_literal |> from_element_list)
+    | ETag(tag, itms) =>
+      ETag({etag_tag: tag, etag_items: itms |> from_arguments})
+    | EAccess(e1, e2) =>
+      EAccess({
+        eacc_expr: e1 |> from_expression,
+        eacc_index: e2 |> from_expression,
+      })
+    | EStructAccess(e1, i) =>
+      EStructAccess({estruct_expr: e1 |> from_expression, estruct_index: i})
+    | EArrAccess(e1, e2) =>
+      EArrAccess({
+        earr_expr: e1 |> from_expression,
+        earr_index: e2 |> from_expression,
+      })
+    | EBin(binop, e1, e2) =>
+      EBin({
+        ebin_op: binop |> from_binop,
+        ebin_lhs: e1 |> from_expression,
+        ebin_rhs: e2 |> from_expression,
+      })
+    | ECond(e1, e2, e3) =>
+      ECond({
+        econd_test: e1 |> from_expression,
+        econd_success: e2 |> from_expression,
+        econd_failure: e3 |> from_expression,
+      })
+    | EArityTest(e) => EArityTest(e |> from_expression)
+    | EVectlength(e) => EVectlength(e |> from_expression)
+    | EArrLen(e) => EArrLen(e |> from_expression)
+    | EDot(e, ident) =>
+      EDot({edot_expr: e |> from_expression, edot_id: ident})
+    | EUn(unop, e) =>
+      EUn({eun_op: unop |> from_unop, eun_expr: e |> from_expression})
+    | EFun((None, ident_lst, body, loc)) =>
+      EFun({
+        params:
+          ident_lst
+          |> List.map(~f=string_of_id)
+          |> List.map(~f=x => (x, IR.TValue)),
+        locals:
+          var_hoist_source_elements(body) |> List.map(~f=x => (x, IR.TValue)),
+        body: body |> from_function_body,
+        loc: from_loc(loc),
+      })
+    | ESeq(e1, e2) => ESeq((e1 |> from_expression, e2 |> from_expression))
+    | ERaw(segments) => ERaw(segments |> from_segment_list)
+    | ERequire(str) => ERequire(str)
+    | ECustomRequire(str) => ECustomRequire(str)
+    | ECustomRegister(e) => ECustomRegister(from_expression(e))
+    | ERuntime => ERuntime
+    | ECopy(e, _loc) => ECopy(from_expression(e))
+    | _ => failwith("unsupported expression")
+    };
+  {expr_desc, expr_typ: IR.TValue};
+}
+and from_lvalue = e => {
+  let lv_desc =
+    switch (e) {
+    | Rehp.EVar(ident) => IR.LVar(ident |> string_of_id)
+    | EStructAccess(e1, i) =>
+      LStructAccess({estruct_expr: e1 |> from_expression, estruct_index: i})
+    | EArrAccess(e1, e2) =>
+      LArrAccess({
+        earr_expr: e1 |> from_expression,
+        earr_index: e2 |> from_expression,
+      })
+    | _ => failwith("unsupported lvalue")
+    };
+  IR.{lv_desc, lv_typ: IR.TValue};
+}
 and from_statement_loc_list = lst =>
   List.map(
     ~f=((stmt, loc)) => (from_statement(stmt), from_loc(loc)),
@@ -263,7 +274,10 @@ and from_statement = e =>
   | Variable_statement([]) => SEmpty
   | Variable_statement([(ident, Some((e, _loc)))]) =>
     SAssignment({
-      sassign_lvalue: LVar(ident |> string_of_id),
+      sassign_lvalue: {
+        lv_desc: LVar(ident |> string_of_id),
+        lv_typ: TValue,
+      },
       sassign_expr: from_expression(e),
     })
   | Empty_statement => SEmpty
@@ -355,8 +369,13 @@ and from_function_body_element =
     SEFunDecl({
       name: ident |> string_of_id,
       func: {
-        params: formal_parameter_list |> List.map(~f=string_of_id),
-        locals: var_hoist_source_elements(function_body),
+        params:
+          formal_parameter_list
+          |> List.map(~f=string_of_id)
+          |> List.map(~f=x => (x, IR.TValue)),
+        locals:
+          var_hoist_source_elements(function_body)
+          |> List.map(~f=x => (x, IR.TValue)),
         body: from_function_body(function_body),
         loc: from_loc(location),
       },
@@ -367,7 +386,8 @@ and from_function_body = lst =>
   )
 and ir_from_rehp = lst => {
   IR.{
-    prg_locals: var_hoist_source_elements(lst),
+    prg_locals:
+      var_hoist_source_elements(lst) |> List.map(~f=x => (x, IR.TValue)),
     prg_elements: from_function_body(lst),
   };
 };

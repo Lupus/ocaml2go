@@ -81,15 +81,15 @@ class hoist_requires = {
   pub statement = (s, acc) => {
     switch (s) {
     | IR.SAssignment({
-        sassign_lvalue: LVar(as_),
-        sassign_expr: ERequire(what),
+        sassign_lvalue: {lv_desc: LVar(as_), _},
+        sassign_expr: {expr_desc: ERequire(what), _},
       }) => (
         IR.SEmpty,
         [(what, as_), ...acc],
       )
     | IR.SAssignment({
-        sassign_lvalue: LVar("runtime" as as_),
-        sassign_expr: ERuntime,
+        sassign_lvalue: {lv_desc: LVar("runtime" as as_)},
+        sassign_expr: {expr_desc: ERuntime, _},
       }) => (
         IR.SEmpty,
         [("caml_runtime", as_), ...acc],
@@ -101,7 +101,8 @@ class hoist_requires = {
     let (prg_elements, acc) = self#source_elements(prg_elements, acc);
     let imports =
       List.map(acc, ~f=((_, as_)) => as_) |> Set.of_list((module String));
-    let prg_locals = List.filter(~f=id => !Set.mem(imports, id), prg_locals);
+    let prg_locals =
+      List.filter(~f=((id, _typ)) => !Set.mem(imports, id), prg_locals);
     ({prg_locals, prg_elements}, acc);
   };
 };
@@ -112,7 +113,11 @@ let declare_locals = (locals: IR.locals) => {
   | _ =>
     Decl(
       N,
-      VarDecls(List.map(locals, ~f=id => VarSpecTyp(([id], tval), None))),
+      VarDecls(
+        List.map(locals, ~f=((id, _typ)) =>
+          VarSpecTyp(([id], tval), None)
+        ),
+      ),
     )
   };
 };
@@ -125,7 +130,9 @@ let mark_vars_as_used = vars =>
         Primary(
           FunApp(
             Operand(Var("Mark_as_used")),
-            List.map(vars, ~f=p => Unary(Primary(Operand(Var(p))))),
+            List.map(vars, ~f=((p, _)) =>
+              Unary(Primary(Operand(Var(p))))
+            ),
           ),
         ),
       ),
@@ -189,7 +196,7 @@ and from_variable_declaration =
     )
 and from_arguments = args => List.map(~f=from_expression, args)
 and from_expression = (e: IR.expression): Go.expr =>
-  switch (e) {
+  switch (e.expr_desc) {
   | IR.ECall({ecall_expr: e, ecall_args: args}) =>
     Unary(
       Primary(
@@ -238,8 +245,8 @@ and from_expression = (e: IR.expression): Go.expr =>
       ),
     )
   | EAccess({
-      eacc_expr: EVar("runtime"),
-      eacc_index: EStr({estr_lit: name, _}),
+      eacc_expr: {expr_desc: EVar("runtime"), _},
+      eacc_index: {expr_desc: EStr({estr_lit: name, _}), _},
     }) =>
     Unary(
       Primary(Sel(Operand(Var("runtime")), name |> String.capitalize)),
@@ -272,7 +279,7 @@ and from_expression = (e: IR.expression): Go.expr =>
       Primary(
         ArrAccess(
           e1m |> ta_arr,
-          switch (e2) {
+          switch (e2.expr_desc) {
           | EInt(_) => from_expression(e2)
           | _ => from_expression(e2) |> ta_expr(ta_int)
           },
@@ -394,7 +401,7 @@ and from_statement = (loc, e) =>
   | IR.SRaw((_provides, _requires, s)) => RawStmt(loc, s)
   | SBlock(stms) => Block(loc, from_statement_list(stms))
   | SEmpty => EmptyStmt(loc)
-  | SAssignment({sassign_lvalue: LVar(id), sassign_expr: e}) =>
+  | SAssignment({sassign_lvalue: {lv_desc: LVar(id), _}, sassign_expr: e}) =>
     Simple(loc, AssignVarEquals([id], [from_expression(e)]))
   /*
    | SAssignment({
@@ -423,7 +430,7 @@ and from_statement = (loc, e) =>
      */
   | SAssignment({sassign_lvalue: lvalue, sassign_expr: e}) =>
     let go_lvalue =
-      switch (lvalue) {
+      switch (lvalue.lv_desc) {
       | IR.LStructAccess({estruct_expr: e, estruct_index: i}) =>
         let em =
           switch (from_expression(e)) {
@@ -488,7 +495,7 @@ and from_statement = (loc, e) =>
        );
      Simple(loc, AssignEquals([go_lvalue], [e_call]));
      */
-  | SExpression(EVar(id)) => mark_vars_as_used([id])
+  | SExpression({expr_desc:EVar(id),expr_typ:typ}) => mark_vars_as_used([(id,typ)])
   | SExpression(expr) => Simple(loc, Expr(from_expression(expr)))
   | SReturn(eo) =>
     switch (eo) {
@@ -616,7 +623,7 @@ and gen_func_closure = (formal_parameter_list, locals, function_body) => {
                   Primary(
                     Closure(
                       Some(
-                        List.map(formal_parameter_list, ~f=name =>
+                        List.map(formal_parameter_list, ~f=((name, _)) =>
                           ([name], tval)
                         ),
                       ),

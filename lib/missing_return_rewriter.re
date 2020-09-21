@@ -35,9 +35,13 @@ class rewriter = {
       [
         (
           SEStatement(
-            SExpression(
-              ERaw([RawText({|panic("bug: unreachable function return")|})]),
-            ),
+            SExpression({
+              expr_desc:
+                ERaw([
+                  RawText({|panic("bug: unreachable function return")|}),
+                ]),
+              expr_typ: IR.gen_new_type(),
+            }),
           ),
           N,
         ),

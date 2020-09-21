@@ -22,7 +22,19 @@
  SOFTWARE.
  */
 [@deriving (sexp, traverse)]
-type binop =
+type typ =
+  | TUnit
+  | TInt
+  | TFloat
+  | TBool
+  | TString
+  | T(string)
+  | TFun(list(typ), typ)
+  | TStruct
+  | TArray
+  | TValue
+
+and binop =
   | BOr
   | BAnd
   | BBor
@@ -57,9 +69,9 @@ type binop =
   | BFloatDiv
   | BFloatMod
 
-and formal_parameter_list = list(string)
+and formal_parameter_list = list((string, typ))
 
-and locals = list(string)
+and locals = list((string, typ))
 
 and parse_info = {
   filename: option(string),
@@ -153,7 +165,7 @@ and eun = {
   eun_expr: expression,
 }
 
-and expression =
+and expression_desc =
   | ERaw(list(raw_segment))
   | ESeq((expression, expression))
   | ECond(econd)
@@ -182,6 +194,11 @@ and expression =
   | ERequire(string)
   | ERuntime
 
+and expression = {
+  expr_desc: expression_desc,
+  expr_typ: typ,
+}
+
 and function_body = source_elements
 
 and function_declaration = {
@@ -196,10 +213,15 @@ and function_expression = {
   body: function_body,
 }
 
-and lvalue =
+and lvalue_desc =
   | LVar(string)
   | LArrAccess(earr_access)
   | LStructAccess(estruct_access)
+
+and lvalue = {
+  lv_desc: lvalue_desc,
+  lv_typ: typ,
+}
 
 and raw_segment =
   | RawText(string)
@@ -237,4 +259,28 @@ and statement_list = list((statement, loc))
 and program = {
   prg_locals: locals,
   prg_elements: source_elements,
+};
+
+let typ_compare = (a, b) => Sexp.compare(a |> sexp_of_typ, b |> sexp_of_typ);
+let typ_equal = (a, b) => typ_compare(a, b) == 0;
+
+let gen_new_type = {
+  let last_type_id = ref(0);
+  () => {
+    Int.incr(last_type_id);
+    T(Printf.sprintf("t%d", last_type_id^));
+  };
+};
+
+module Env = {
+  type t = Map.t(string, typ, String.comparator_witness);
+  let empty = Map.empty;
+  let get = (t, x) =>
+    Map.find(t, x)
+    |> Option.value_exn(
+         ~message=Printf.sprintf("variable %s is not defined", x),
+         _,
+       );
+  let add_vars = (t, ids) =>
+    List.fold_left(ids, ~init=t, ~f=(m, x) => Map.add(x, gen_new_type(), m));
 };

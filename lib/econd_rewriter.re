@@ -31,7 +31,7 @@ class find = {
   pub expression = (e, acc) => {
     switch (acc) {
     | None =>
-      switch (e) {
+      switch (e.expr_desc) {
       | ECond({econd_test: e, _}) => Some(e)
       | EFun(_) => acc
       | _ => super#expression(e, acc)
@@ -58,7 +58,7 @@ class econd_subst = {
   inherit class Traverse_builtins.map_with_context(subst_ctx);
   inherit class map_with_context(subst_ctx) as super;
   pub expression = ({econd, follow} as ctx, e) => {
-    switch (e) {
+    switch (e.expr_desc) {
     | ECond({econd_test, econd_success, econd_failure})
         when phys_equal(econd_test, econd) =>
       switch (follow) {
