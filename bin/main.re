@@ -120,6 +120,7 @@ let process_tree = tree => {
   let ir = Rehp_import.ir_from_rehp(tree);
   let ir =
     ir |> Econd_rewriter.run |> Exn_rewriter.run |> Missing_return_rewriter.run;
+  let ir = Inference.run(ir);
   save_ir_for_tests(ir);
   let go = Go_from_rehp.from_ir(ir);
   Go_output.program(go);

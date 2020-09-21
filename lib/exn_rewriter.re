@@ -77,7 +77,7 @@ module Acc = {
   };
 
   let add_local = (t, v) => {
-    {...t, new_locals: [(v, TValue), ...t.new_locals]};
+    {...t, new_locals: [(v, gen_new_type()), ...t.new_locals]};
   };
 };
 
@@ -145,7 +145,8 @@ class id_renamer = {
   inherit class Traverse_builtins.map_with_context(Acc.var_rewrite);
   inherit class map_with_context(Acc.var_rewrite) as super;
   pub function_expression = (Acc.{from, _} as ctx, fe) => {
-    if (List.mem(fe.locals, (from, IR.TValue), ~equal=((id1, _), (id2, _)) =>
+    if (List.mem(
+          fe.locals, (from, IR.gen_new_type()), ~equal=((id1, _), (id2, _)) =>
           String.equal(id1, id2)
         )) {
       failwith(
@@ -157,7 +158,8 @@ class id_renamer = {
         ),
       );
     };
-    if (List.mem(fe.params, (from, IR.TValue), ~equal=((id1, _), (id2, _)) =>
+    if (List.mem(
+          fe.params, (from, IR.gen_new_type()), ~equal=((id1, _), (id2, _)) =>
           String.equal(id1, id2)
         )) {
       failwith(
@@ -246,14 +248,14 @@ class rewriter = {
         EAccess({
           eacc_expr: {
             expr_desc: EVar("runtime"),
-            expr_typ: IR.TValue,
+            expr_typ: IR.gen_new_type(),
           },
           eacc_index: {
             expr_desc: EStr({estr_lit: "caml_try", estr_kind: Bytes}),
             expr_typ: IR.TString,
           },
         }),
-      expr_typ: TValue,
+      expr_typ: gen_new_type(),
     };
     let (body_sl, acc) = self#statement_list(b1, acc);
     let cont_success = {expr_desc: EInt(0), expr_typ: IR.TInt};
@@ -270,17 +272,17 @@ class rewriter = {
           body: body_sl |> List.map(~f=((s, l)) => (SEStatement(s), l)),
           loc: N,
         }),
-      expr_typ: TValue,
+      expr_typ: gen_new_type(),
     };
     let try_apply = {
       expr_desc: ECall({ecall_expr: caml_try, ecall_args: [try_closure]}),
-      expr_typ: TValue,
+      expr_typ: gen_new_type(),
     };
     let try_assign =
       SAssignment({
         sassign_lvalue: {
           lv_desc: LVar(var),
-          lv_typ: TValue,
+          lv_typ: gen_new_type(),
         },
         sassign_expr: try_apply,
       });
@@ -289,28 +291,28 @@ class rewriter = {
         EStructAccess({
           estruct_expr: {
             expr_desc: EVar(var),
-            expr_typ: TValue,
+            expr_typ: gen_new_type(),
           },
           estruct_index: 0,
         }),
-      expr_typ: TValue,
+      expr_typ: gen_new_type(),
     };
     let try_value = {
       expr_desc:
         EStructAccess({
           estruct_expr: {
             expr_desc: EVar(var),
-            expr_typ: TValue,
+            expr_typ: gen_new_type(),
           },
           estruct_index: 1,
         }),
-      expr_typ: TValue,
+      expr_typ: gen_new_type(),
     };
     let catch_var_assign =
       SAssignment({
         sassign_lvalue: {
           lv_desc: LVar(id),
-          lv_typ: TValue,
+          lv_typ: gen_new_type(),
         },
         sassign_expr: try_value,
       });

@@ -231,9 +231,10 @@ and from_expression = e => {
         params:
           ident_lst
           |> List.map(~f=string_of_id)
-          |> List.map(~f=x => (x, IR.TValue)),
+          |> List.map(~f=x => (x, IR.gen_new_type())),
         locals:
-          var_hoist_source_elements(body) |> List.map(~f=x => (x, IR.TValue)),
+          var_hoist_source_elements(body)
+          |> List.map(~f=x => (x, IR.gen_new_type())),
         body: body |> from_function_body,
         loc: from_loc(loc),
       })
@@ -246,7 +247,7 @@ and from_expression = e => {
     | ECopy(e, _loc) => ECopy(from_expression(e))
     | _ => failwith("unsupported expression")
     };
-  {expr_desc, expr_typ: IR.TValue};
+  {expr_desc, expr_typ: IR.gen_new_type()};
 }
 and from_lvalue = e => {
   let lv_desc =
@@ -261,7 +262,7 @@ and from_lvalue = e => {
       })
     | _ => failwith("unsupported lvalue")
     };
-  IR.{lv_desc, lv_typ: IR.TValue};
+  IR.{lv_desc, lv_typ: IR.gen_new_type()};
 }
 and from_statement_loc_list = lst =>
   List.map(
@@ -276,7 +277,7 @@ and from_statement = e =>
     SAssignment({
       sassign_lvalue: {
         lv_desc: LVar(ident |> string_of_id),
-        lv_typ: TValue,
+        lv_typ: IR.gen_new_type(),
       },
       sassign_expr: from_expression(e),
     })
@@ -372,10 +373,10 @@ and from_function_body_element =
         params:
           formal_parameter_list
           |> List.map(~f=string_of_id)
-          |> List.map(~f=x => (x, IR.TValue)),
+          |> List.map(~f=x => (x, IR.gen_new_type())),
         locals:
           var_hoist_source_elements(function_body)
-          |> List.map(~f=x => (x, IR.TValue)),
+          |> List.map(~f=x => (x, IR.gen_new_type())),
         body: from_function_body(function_body),
         loc: from_loc(location),
       },
@@ -387,7 +388,8 @@ and from_function_body = lst =>
 and ir_from_rehp = lst => {
   IR.{
     prg_locals:
-      var_hoist_source_elements(lst) |> List.map(~f=x => (x, IR.TValue)),
+      var_hoist_source_elements(lst)
+      |> List.map(~f=x => (x, IR.gen_new_type())),
     prg_elements: from_function_body(lst),
   };
 };

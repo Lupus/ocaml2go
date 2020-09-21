@@ -7,7 +7,8 @@ export DUNE_CACHE=disabled
 dune build bin/main.exe
 export OCAML2GO="$PWD/_build/default/bin/main.exe"
 
-for test in hello_world loop_labels ocaml_lib_tests btree huffman nbody strings polymorphism mutual_references hindley_milner_lang
+for test in hello_world
+#for test in hello_world loop_labels ocaml_lib_tests btree huffman nbody strings polymorphism mutual_references hindley_milner_lang
 do
   echo
   echo "************  $test  ************"

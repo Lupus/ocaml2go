@@ -21,18 +21,18 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
  */
-[@deriving (sexp, traverse)]
+[@deriving (sexp, compare, equal, hash, traverse)]
 type typ =
   | TUnit
   | TInt
   | TFloat
   | TBool
   | TString
-  | T(string)
+  | TVar(string)
   | TFun(list(typ), typ)
   | TStruct
   | TArray
-  | TValue
+  | TAny(string)
 
 and binop =
   | BOr
@@ -268,19 +268,6 @@ let gen_new_type = {
   let last_type_id = ref(0);
   () => {
     Int.incr(last_type_id);
-    T(Printf.sprintf("t%d", last_type_id^));
+    TVar(Printf.sprintf("t%d", last_type_id^));
   };
-};
-
-module Env = {
-  type t = Map.t(string, typ, String.comparator_witness);
-  let empty = Map.empty;
-  let get = (t, x) =>
-    Map.find(t, x)
-    |> Option.value_exn(
-         ~message=Printf.sprintf("variable %s is not defined", x),
-         _,
-       );
-  let add_vars = (t, ids) =>
-    List.fold_left(ids, ~init=t, ~f=(m, x) => Map.add(x, gen_new_type(), m));
 };
