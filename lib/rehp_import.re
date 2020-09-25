@@ -247,6 +247,15 @@ and from_expression = e => {
     | ECopy(e, _loc) => ECopy(from_expression(e))
     | _ => failwith("unsupported expression")
     };
+  /*
+   switch (e) {
+   | EBool(_) => {expr_desc, expr_typ: TBool}
+   | EFloat(_) => {expr_desc, expr_typ: TFloat}
+   | EInt(_) => {expr_desc, expr_typ: TInt}
+   | EStr(_) => {expr_desc, expr_typ: TString}
+   | _ => {expr_desc, expr_typ: IR.gen_new_type()}
+   };
+   */
   {expr_desc, expr_typ: IR.gen_new_type()};
 }
 and from_lvalue = e => {
