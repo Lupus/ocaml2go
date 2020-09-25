@@ -32,7 +32,7 @@ module G = {
       | Float
       | Bool
       | String
-      | Struct
+      | Struct(string)
       | Array
       | Var(string)
       | Fun(string)
@@ -43,6 +43,13 @@ module G = {
       () => {
         Int.incr(last_func_id);
         Fun(Printf.sprintf("f%d", last_func_id^));
+      };
+    };
+    let gen_new_struct = {
+      let last_struct_id = ref(0);
+      () => {
+        Int.incr(last_struct_id);
+        Struct(Printf.sprintf("s%d", last_struct_id^));
       };
     };
     let of_typ =
@@ -57,7 +64,10 @@ module G = {
         failwith(
           "TFun should not appear in expressions during constraint collection",
         )
-      | TStruct => Struct
+      | TStruct =>
+        failwith(
+          "TStruct should not appear in expressions during constraint collection",
+        )
       | TArray => Array
       | TAny(_) =>
         failwith(
@@ -69,6 +79,7 @@ module G = {
     type t =
       | Arg(int)
       | Returns
+      | Field(int)
       | Constraint;
     let default = Constraint;
   };
@@ -76,6 +87,21 @@ module G = {
   include Graph.Merge.I(X);
   include X;
 };
+
+module Reachability =
+  Graph.Fixpoint.Make(
+    G,
+    {
+      type vertex = G.E.vertex;
+      type edge = G.E.t;
+      type g = G.t;
+      type data = bool;
+      let direction = Graph.Fixpoint.Forward;
+      let equal = Bool.equal;
+      let join = (||);
+      let analyze = (_, x) => x;
+    },
+  );
 
 module Display = {
   include G;
@@ -86,7 +112,7 @@ module Display = {
     | Float => "float"
     | Bool => "bool"
     | String => "string"
-    | Struct => "struct"
+    | Struct(x) => Printf.sprintf("\"struct (%s)\"", x)
     | Array => "array"
     | Var(x) => x
     | Fun(x) => Printf.sprintf("\"-> (%s)\"", x)
@@ -102,6 +128,11 @@ module Display = {
         `HtmlLabel(Printf.sprintf({|<font color="blue">Arg(%d)</font>|}, x)),
       ]
     | (_, Returns, _) => [`HtmlLabel({|<font color="red">Returns</font>|})]
+    | (_, Field(x), _) => [
+        `HtmlLabel(
+          Printf.sprintf({|<font color="green">Field(%d)</font>|}, x),
+        ),
+      ]
     | (_, Constraint, _) => [`Style(`Dashed)]
     };
   };
@@ -134,7 +165,6 @@ module Acc = {
     float_v: G.vertex,
     int_v: G.vertex,
     str_v: G.vertex,
-    struct_v: G.vertex,
     arr_v: G.vertex,
     fn_return_v: option(G.vertex),
   };
@@ -151,22 +181,9 @@ module Acc = {
     G.add_vertex(g, int_v);
     let str_v = G.Vertex.of_typ(IR.TString);
     G.add_vertex(g, str_v);
-    let struct_v = G.Vertex.of_typ(IR.TStruct);
-    G.add_vertex(g, struct_v);
     let arr_v = G.Vertex.of_typ(IR.TArray);
     G.add_vertex(g, arr_v);
-    {
-      env,
-      g,
-      unit_v,
-      bool_v,
-      float_v,
-      int_v,
-      str_v,
-      struct_v,
-      arr_v,
-      fn_return_v: None,
-    };
+    {env, g, unit_v, bool_v, float_v, int_v, str_v, arr_v, fn_return_v: None};
   };
 };
 
@@ -196,7 +213,10 @@ class collect_constraints = {
       G.add_edge_e(acc.g, edge);
       G.add_edge(acc.g, e_v, fn_v);
       acc;
-    | EVar(_) => acc
+    | EVar(id) =>
+      let var_v = Env.get(acc.env, id);
+      G.add_edge(acc.g, expr_v, var_v);
+      acc;
     | EBool(_) =>
       G.add_edge(acc.g, expr_v, acc.bool_v);
       acc;
@@ -209,22 +229,51 @@ class collect_constraints = {
     | EStr(_) =>
       G.add_edge(acc.g, expr_v, acc.str_v);
       acc;
-    | ETag(_)
-    | EStruct(_) =>
-      G.add_edge(acc.g, expr_v, acc.struct_v);
+    | ETag({etag_tag: _, etag_items: args}) =>
+      let acc = self#arguments(args, acc);
+      let struct_v = G.Vertex.gen_new_struct();
+      let edge = G.E.create(struct_v, G.Edge.Field(0), acc.int_v);
+      G.add_edge_e(acc.g, edge);
+      List.iteri(
+        args,
+        ~f=(i, arg) => {
+          let arg_v = G.Vertex.of_typ(arg.expr_typ);
+          let edge = G.E.create(struct_v, G.Edge.Field(i + 1), arg_v);
+          G.add_edge_e(acc.g, edge);
+        },
+      );
+      G.add_edge(acc.g, expr_v, struct_v);
+      acc;
+    | EStruct(args) =>
+      let acc = self#arguments(args, acc);
+      let struct_v = G.Vertex.gen_new_struct();
+      List.iteri(
+        args,
+        ~f=(i, arg) => {
+          let arg_v = G.Vertex.of_typ(arg.expr_typ);
+          let edge = G.E.create(struct_v, G.Edge.Field(i), arg_v);
+          G.add_edge_e(acc.g, edge);
+        },
+      );
+      G.add_edge(acc.g, expr_v, struct_v);
       acc;
     | EArr(_) =>
       G.add_edge(acc.g, expr_v, acc.arr_v);
       acc;
-    | EAccess({eacc_expr, eacc_index}) =>
-      let acc = self#expression(eacc_expr, acc);
-      let eacc_expr_v = G.Vertex.of_typ(eacc_expr.expr_typ);
-      G.add_edge(acc.g, eacc_expr_v, acc.struct_v);
-      acc;
-    | EStructAccess({estruct_expr, _}) =>
+    | EAccess({eacc_expr: _, eacc_index: _}) =>
+      /*let acc = self#expression(eacc_expr, acc);
+        let eacc_expr_v = G.Vertex.of_typ(eacc_expr.expr_typ);
+        G.add_edge(acc.g, eacc_expr_v, acc.struct_v);*/
+      acc
+    | EStructAccess({estruct_expr, estruct_index}) =>
       let acc = self#expression(estruct_expr, acc);
       let estruct_expr_v = G.Vertex.of_typ(estruct_expr.expr_typ);
-      G.add_edge(acc.g, estruct_expr_v, acc.struct_v);
+      let struct_v = G.Vertex.gen_new_struct();
+      let field_v = G.Vertex.of_typ(IR.gen_new_type());
+      let edge = G.E.create(struct_v, G.Edge.Field(estruct_index), field_v);
+      G.add_edge_e(acc.g, edge);
+      G.add_edge(acc.g, estruct_expr_v, struct_v);
+      G.add_edge(acc.g, expr_v, field_v);
       acc;
     | EArrAccess({earr_expr, _}) =>
       let acc = self#expression(earr_expr, acc);
@@ -291,7 +340,8 @@ class collect_constraints = {
     | EVectlength(e) =>
       let e_v = G.Vertex.of_typ(e.expr_typ);
       let acc = self#expression(e, acc);
-      G.add_edge(acc.g, e_v, acc.struct_v);
+      let struct_v = G.Vertex.gen_new_struct();
+      G.add_edge(acc.g, e_v, struct_v);
       G.add_edge(acc.g, expr_v, acc.int_v);
       acc;
     | EArrLen(e) =>
@@ -392,9 +442,16 @@ class collect_constraints = {
         let e_v = G.Vertex.of_typ(e.expr_typ);
         G.add_edge(acc.g, e_v, var_v);
         acc;
-      | LStructAccess({estruct_expr: e, _}) =>
+      | LStructAccess({estruct_expr, estruct_index}) =>
         let e_v = G.Vertex.of_typ(e.expr_typ);
-        G.add_edge(acc.g, e_v, acc.struct_v);
+        let estruct_expr_v = G.Vertex.of_typ(estruct_expr.expr_typ);
+        let struct_v = G.Vertex.gen_new_struct();
+        let field_v = G.Vertex.of_typ(IR.gen_new_type());
+        let edge =
+          G.E.create(struct_v, G.Edge.Field(estruct_index), field_v);
+        G.add_edge_e(acc.g, edge);
+        G.add_edge(acc.g, estruct_expr_v, struct_v);
+        G.add_edge(acc.g, e_v, field_v);
         acc;
       | LArrAccess({earr_expr: e1, earr_index: e2}) =>
         let e1_v = G.Vertex.of_typ(e1.expr_typ);
@@ -468,8 +525,71 @@ class collect_constraints = {
   };
 };
 
+let last_fn_constraing_id = ref(0);
+let output_fn_constraint = (g, v1, v2) => {
+  let is_root_vertex = v =>
+    [%equal: G.Vertex.t](v, v1) || [%equal: G.Vertex.t](v, v2);
+  let reachable_from_roots = Reachability.analyze(is_root_vertex, g);
+  let g' = G.create();
+  g
+  |> G.iter_edges_e(((v1, elb, v2) as e) => {
+       switch (elb) {
+       | Constraint => ()
+       | _ =>
+         if (reachable_from_roots(v1) && reachable_from_roots(v2)) {
+           G.add_edge_e(g', e);
+         }
+       }
+     });
+  let id = last_fn_constraing_id^;
+  Int.incr(last_fn_constraing_id);
+  let out =
+    Stdio.Out_channel.create(Printf.sprintf("fn_constraint_%d.dot", id));
+  Gv.output_graph(out, g');
+  Stdio.Out_channel.close(out);
+};
+
 let run = prg => {
   let acc = (new collect_constraints)#program(prg, Acc.create());
+  acc.g
+  |> G.iter_edges_e(edge => {
+       switch (edge) {
+       | (v1, G.Edge.Constraint, v2) =>
+         switch (v1, v2) {
+         | (G.Vertex.Unit, G.Vertex.Var(x))
+         | (G.Vertex.Int, G.Vertex.Var(x))
+         | (G.Vertex.Float, G.Vertex.Var(x))
+         | (G.Vertex.Bool, G.Vertex.Var(x))
+         | (G.Vertex.String, G.Vertex.Var(x))
+         | (G.Vertex.Struct(_), G.Vertex.Var(x))
+         | (G.Vertex.Array, G.Vertex.Var(x))
+         | (G.Vertex.Fun(_), G.Vertex.Var(x))
+         | (G.Vertex.Any(_), G.Vertex.Var(x)) =>
+           G.merge_vertex(acc.g, [v1, v2])
+         | (G.Vertex.Var(x), G.Vertex.Unit)
+         | (G.Vertex.Var(x), G.Vertex.Int)
+         | (G.Vertex.Var(x), G.Vertex.Float)
+         | (G.Vertex.Var(x), G.Vertex.Bool)
+         | (G.Vertex.Var(x), G.Vertex.String)
+         | (G.Vertex.Var(x), G.Vertex.Struct(_))
+         | (G.Vertex.Var(x), G.Vertex.Array)
+         | (G.Vertex.Var(x), G.Vertex.Fun(_))
+         | (G.Vertex.Var(x), G.Vertex.Any(_)) =>
+           G.merge_vertex(acc.g, [v2, v1])
+         | (G.Vertex.Var(_), G.Vertex.Var(_)) =>
+           G.merge_vertex(acc.g, [v1, v2])
+         | (G.Vertex.Fun(_), G.Vertex.Fun(_)) =>
+           output_fn_constraint(acc.g, v1, v2)
+         | (v1, v2) =>
+           Stdio.eprintf(
+             "Ignoring constraint %{sexp:G.Vertex.t} == %{sexp:G.Vertex.t}\n"^,
+             v1,
+             v2,
+           )
+         }
+       | _ => ()
+       }
+     });
   let out = Stdio.Out_channel.create("out.dot");
   Gv.output_graph(out, acc.g);
   Stdio.Out_channel.close(out);
