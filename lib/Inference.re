@@ -604,16 +604,57 @@ let output_fn_constraint = (g, v1, v2) => {
   Stdio.Out_channel.close(out);
 };
 
+let get_args_and_ret = (g, v) => {
+  let (args, ret) =
+    G.fold_succ_e(
+      (e, (args, ret)) => {
+        switch (e) {
+        | (_, Arg(i), v) =>
+          let args = Map.add_exn(args, ~key=i, ~data=v);
+          (args, ret);
+        | (_, Returns, v) =>
+          switch (ret) {
+          | Some(_) => failwith("conflicting return for function!")
+          | None => (args, Some(v))
+          }
+        | _ => (args, ret)
+        }
+      },
+      g,
+      v,
+      (Map.empty((module Int)), None),
+    );
+  let args = List.init(Map.length(args), ~f=i => Map.find_exn(args, i));
+  let ret = Option.value_exn(ret, ~message="no return in function node");
+  (args, ret);
+};
+
 let group_constraints = g => {
   module G' = {
     type t = G.t;
     module V = G.V;
-    let iter_vertex = G.iter_vertex;
+    let iter_vertex = (f, g) => {
+      G.iter_vertex(
+        v => {
+          switch (v.G.Vertex.kind) {
+          | Fun => f(v)
+          | Var(_) => f(v)
+          | _ => ()
+          }
+        },
+        g,
+      );
+    };
     let iter_edges = (f, g) => {
       G.iter_edges_e(
         ((v1, lbl, v2)) => {
-          switch (lbl) {
-          | G.Edge.Constraint => f(v1, v2)
+          switch (v1, lbl, v2) {
+          | (
+              {kind: Fun | Var(_), _},
+              G.Edge.Constraint,
+              {kind: Fun | Var(_), _},
+            ) =>
+            f(v1, v2)
           | _ => ()
           }
         },
@@ -623,16 +664,17 @@ let group_constraints = g => {
   };
   module C = Graph.Components.Undirected(G');
   let groups = C.components_list(g);
-  List.iter(
-    groups,
-    ~f=group => {
-      Stdio.eprintf("Constraing group:\n");
-      List.iter(group, ~f=v => {
-        Stdio.eprintf("  - %{sexp:G.Vertex.t}\n"^, v)
-      });
-      Stdio.eprintf("\n");
-    },
-  );
+  List.sort(groups, ~compare=(a, b) =>
+    Int.ascending(List.length(a), List.length(b))
+  )
+  |> List.iter(~f=group => {
+       Stdio.eprintf("Constraint group:\n");
+       List.iter(group, ~f=v => {
+         Stdio.eprintf("  - %{sexp:G.Vertex.t}\n"^, v)
+       });
+       /* for each function vertex: print it's arguments and return vertexes with +2 indentation */
+       Stdio.eprintf("\n");
+     });
 };
 
 let run = prg => {

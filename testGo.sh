@@ -19,7 +19,7 @@ do
   js_of_ocaml \
 	--enable excwrap \
 	--enable wrapped-exceptions  \
-	--noinline \
+	--opt 3 \
 	--disable shortvar \
 	--disable simplify_ifdecl \
 	--pretty \
