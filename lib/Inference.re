@@ -257,12 +257,6 @@ class collect_constraints = {
           G.add_edge_e(acc.g, edge);
         },
       );
-      Stdio.eprintf(
-        "ETAG: adding constraint edge from %{sexp:G.Vertex.t} to %{sexp:G.Vertex.t}\n"
-          ^,
-        expr_v,
-        struct_v,
-      );
       G.add_edge(acc.g, expr_v, struct_v);
       acc;
     | EStruct(args) =>
@@ -490,12 +484,6 @@ class collect_constraints = {
       switch (eo, acc.fn_return_v) {
       | (Some(e), Some(fn_return_v)) =>
         let e_v = G.Vertex.of_typ(e.expr_typ);
-        Stdio.eprintf(
-          "SRETURN: adding constraint edge from %{sexp:G.Vertex.t} to %{sexp:G.Vertex.t}\n"
-            ^,
-          e_v,
-          fn_return_v,
-        );
         G.add_edge(acc.g, e_v, fn_return_v);
         acc;
       | (Some(e), None) =>
@@ -633,6 +621,141 @@ let group_constraints = g => {
   module G' = {
     type t = G.t;
     module V = G.V;
+    let iter_vertex = G.iter_vertex;
+    let iter_edges = (f, g) => {
+      G.iter_edges_e(
+        ((v1, lbl, v2)) => {
+          switch (v1, lbl, v2) {
+          | (_, G.Edge.Constraint, _) => f(v1, v2)
+          | _ => ()
+          }
+        },
+        g,
+      );
+    };
+  };
+  module C = Graph.Components.Undirected(G');
+  let groups = C.components_list(g);
+  let trivial_groups = ref(0);
+  List.sort(groups, ~compare=(a, b) =>
+    Int.ascending(List.length(a), List.length(b))
+  )
+  |> List.iter(~f=group => {
+       let dups =
+         List.sort(group, ~compare=[%compare: G.Vertex.t])
+         |> List.remove_consecutive_duplicates(~equal=(v1, v2) => {
+              switch (v1.G.Vertex.kind, v2.kind) {
+              | (_, Var(_))
+              | (Var(_), _) => true
+              | (Int, Bool)
+              | (Bool, Int) => true
+              | (Struct, Bool)
+              | (Bool, Struct) => true
+              | (a, b) => [%equal: G.Vertex.kind](a, b)
+              }
+            });
+       switch (dups) {
+       | []
+       | [_] => Int.incr(trivial_groups)
+       | _ =>
+         Stdio.eprintf("Constraint group:\n");
+         let vars_skipped = ref(0);
+         List.iter(group, ~f=v => {
+           switch (v) {
+           //| {G.Vertex.kind: Var(_), _} => Int.incr(vars_skipped)
+           | _ => Stdio.eprintf("  - %{sexp:G.Vertex.t}\n"^, v)
+           }
+         });
+         if (vars_skipped^ > 0) {
+           Stdio.eprintf(
+             "  - (%d type variables not shown)\n",
+             vars_skipped^,
+           );
+         };
+         Stdio.eprintf("\n");
+       };
+     });
+  Stdio.eprintf("TRIVIAL GROUPS FOUND: %d\n", trivial_groups^);
+};
+
+let add_fn_constraints = g => {
+  module G' = {
+    type t = G.t;
+    module V = G.V;
+    let iter_vertex = (f, g) => {
+      G.iter_vertex(
+        v => {
+          switch (v.G.Vertex.kind) {
+          | Fun => f(v)
+          | Var(_) => f(v)
+          | _ => ()
+          }
+        },
+        g,
+      );
+    };
+    let iter_edges = (f, g) => {
+      G.iter_edges_e(
+        ((v1, lbl, v2)) => {
+          switch (v1, lbl, v2) {
+          | (
+              {kind: Fun | Var(_), _},
+              G.Edge.Constraint,
+              {kind: Fun | Var(_), _},
+            ) =>
+            f(v1, v2)
+          | _ => ()
+          }
+        },
+        g,
+      );
+    };
+  };
+  module C = Graph.Components.Undirected(G');
+  let groups = C.components_list(g);
+  List.iter(
+    groups,
+    ~f=group => {
+      let maybe_transposed =
+        List.map(group, ~f=v => {
+          switch (v) {
+          | {kind: G.Vertex.Fun, _} =>
+            let (args, ret) = get_args_and_ret(g, v);
+            Some([ret, ...args]);
+          | _ => None
+          }
+        })
+        |> List.filter_opt
+        |> List.transpose;
+      switch (maybe_transposed) {
+      | Some(l) =>
+        List.iter(
+          l,
+          ~f=vs => {
+            let prev = ref(None);
+            List.iter(
+              vs,
+              ~f=v => {
+                switch (prev^) {
+                | Some(pv) => G.add_edge(g, pv, v)
+                | None => ()
+                };
+                prev := Some(v);
+              },
+            );
+          },
+        )
+      | None =>
+        Stdio.eprintf("Got constraint group with different arities!\n")
+      };
+    },
+  );
+};
+
+let group_fn_constraints = g => {
+  module G' = {
+    type t = G.t;
+    module V = G.V;
     let iter_vertex = (f, g) => {
       G.iter_vertex(
         v => {
@@ -668,83 +791,103 @@ let group_constraints = g => {
     Int.ascending(List.length(a), List.length(b))
   )
   |> List.iter(~f=group => {
-       Stdio.eprintf("Constraint group:\n");
-       List.iter(group, ~f=v => {
-         Stdio.eprintf("  - %{sexp:G.Vertex.t}\n"^, v)
-       });
-       /* for each function vertex: print it's arguments and return vertexes with +2 indentation */
+       Stdio.eprintf("Function constraint group:\n");
+       List.iter(
+         group,
+         ~f=v => {
+           Stdio.eprintf("  - %{sexp:G.Vertex.t}\n"^, v);
+           switch (v) {
+           | {kind: G.Vertex.Fun, _} =>
+             let (args, ret) = get_args_and_ret(g, v);
+             List.iteri(args, ~f=(i, v) => {
+               Stdio.eprintf("    %d. %{sexp:G.Vertex.t}\n"^, i, v)
+             });
+             Stdio.eprintf("    -> %{sexp:G.Vertex.t}\n"^, ret);
+           | _ => ()
+           };
+         },
+       );
        Stdio.eprintf("\n");
      });
 };
 
 let run = prg => {
-  let acc = (new collect_constraints)#program(prg, Acc.create());
-  group_constraints(acc.g);
-  let subst = Hashtbl.create((module String));
-  let add_subst = (name, typ) => {
-    switch (Hashtbl.add(subst, ~key=name, ~data=typ)) {
-    | `Duplicate =>
-      let existing_typ = Hashtbl.find_exn(subst, name);
-      Stdio.eprintf(
-        "conflicling substitution for %s, new one: %{sexp:IR.typ}, existing one: %{sexp:IR.typ}\n"
-          ^,
-        name,
-        typ,
-        existing_typ,
-      );
-    | `Ok => ()
-    };
+  let acc = Acc.create();
+  let acc = {
+    ...acc,
+    env: Env.add_vars(acc.env, [("Math", IR.gen_new_type())]),
   };
-  let constraints =
-    G.fold_edges_e(
-      (edge, cc) => {
-        switch (edge) {
-        | (v1, G.Edge.Constraint, v2) => [(v1, v2), ...cc]
-        | _ => cc
-        }
-      },
-      acc.g,
-      [],
-    );
-  List.iter(constraints, ~f=((v1, v2)) => {
-    switch (v1.kind, v2.kind) {
-    | (G.Vertex.Unit, G.Vertex.Var(x))
-    | (G.Vertex.Int, G.Vertex.Var(x))
-    | (G.Vertex.Float, G.Vertex.Var(x))
-    | (G.Vertex.Bool, G.Vertex.Var(x))
-    | (G.Vertex.String, G.Vertex.Var(x))
-    | (G.Vertex.Struct, G.Vertex.Var(x))
-    | (G.Vertex.Array, G.Vertex.Var(x))
-    | (G.Vertex.Fun, G.Vertex.Var(x))
-    | (G.Vertex.Any, G.Vertex.Var(x)) =>
-      add_subst(x, G.Vertex.to_typ(v1));
-      G.merge_vertex(acc.g, [v1, v2]);
-    | (G.Vertex.Var(_), G.Vertex.Var(x)) =>
-      add_subst(x, G.Vertex.to_typ(v1));
-      G.merge_vertex(acc.g, [v1, v2]);
-    | (G.Vertex.Var(x), G.Vertex.Unit)
-    | (G.Vertex.Var(x), G.Vertex.Int)
-    | (G.Vertex.Var(x), G.Vertex.Float)
-    | (G.Vertex.Var(x), G.Vertex.Bool)
-    | (G.Vertex.Var(x), G.Vertex.String)
-    | (G.Vertex.Var(x), G.Vertex.Struct)
-    | (G.Vertex.Var(x), G.Vertex.Array)
-    | (G.Vertex.Var(x), G.Vertex.Fun)
-    | (G.Vertex.Var(x), G.Vertex.Any) =>
-      add_subst(x, G.Vertex.to_typ(v2));
-      G.merge_vertex(acc.g, [v2, v1]);
-    | (G.Vertex.Fun, G.Vertex.Fun) => output_fn_constraint(acc.g, v1, v2)
-    | (v1, v2) =>
-      Stdio.eprintf(
-        "Ignoring constraint %{sexp:G.Vertex.kind} == %{sexp:G.Vertex.kind}\n"
-          ^,
-        v1,
-        v2,
-      )
-    }
-  });
-  let out = Stdio.Out_channel.create("out.dot");
-  Gv.output_graph(out, acc.g);
-  Stdio.Out_channel.close(out);
-  (new substitute_types)#program(subst, prg);
+  let acc = (new collect_constraints)#program(prg, acc);
+  add_fn_constraints(acc.g);
+  group_constraints(acc.g);
+  prg;
+  /*
+   let subst = Hashtbl.create((module String));
+   let add_subst = (name, typ) => {
+     switch (Hashtbl.add(subst, ~key=name, ~data=typ)) {
+     | `Duplicate =>
+       let existing_typ = Hashtbl.find_exn(subst, name);
+       Stdio.eprintf(
+         "conflicling substitution for %s, new one: %{sexp:IR.typ}, existing one: %{sexp:IR.typ}\n"
+           ^,
+         name,
+         typ,
+         existing_typ,
+       );
+     | `Ok => ()
+     };
+   };
+   let constraints =
+     G.fold_edges_e(
+       (edge, cc) => {
+         switch (edge) {
+         | (v1, G.Edge.Constraint, v2) => [(v1, v2), ...cc]
+         | _ => cc
+         }
+       },
+       acc.g,
+       [],
+     );
+   List.iter(constraints, ~f=((v1, v2)) => {
+     switch (v1.kind, v2.kind) {
+     | (G.Vertex.Unit, G.Vertex.Var(x))
+     | (G.Vertex.Int, G.Vertex.Var(x))
+     | (G.Vertex.Float, G.Vertex.Var(x))
+     | (G.Vertex.Bool, G.Vertex.Var(x))
+     | (G.Vertex.String, G.Vertex.Var(x))
+     | (G.Vertex.Struct, G.Vertex.Var(x))
+     | (G.Vertex.Array, G.Vertex.Var(x))
+     | (G.Vertex.Fun, G.Vertex.Var(x))
+     | (G.Vertex.Any, G.Vertex.Var(x)) =>
+       add_subst(x, G.Vertex.to_typ(v1));
+       G.merge_vertex(acc.g, [v1, v2]);
+     | (G.Vertex.Var(_), G.Vertex.Var(x)) =>
+       add_subst(x, G.Vertex.to_typ(v1));
+       G.merge_vertex(acc.g, [v1, v2]);
+     | (G.Vertex.Var(x), G.Vertex.Unit)
+     | (G.Vertex.Var(x), G.Vertex.Int)
+     | (G.Vertex.Var(x), G.Vertex.Float)
+     | (G.Vertex.Var(x), G.Vertex.Bool)
+     | (G.Vertex.Var(x), G.Vertex.String)
+     | (G.Vertex.Var(x), G.Vertex.Struct)
+     | (G.Vertex.Var(x), G.Vertex.Array)
+     | (G.Vertex.Var(x), G.Vertex.Fun)
+     | (G.Vertex.Var(x), G.Vertex.Any) =>
+       add_subst(x, G.Vertex.to_typ(v2));
+       G.merge_vertex(acc.g, [v2, v1]);
+     | (G.Vertex.Fun, G.Vertex.Fun) => output_fn_constraint(acc.g, v1, v2)
+     | (v1, v2) =>
+       Stdio.eprintf(
+         "Ignoring constraint %{sexp:G.Vertex.kind} == %{sexp:G.Vertex.kind}\n"
+           ^,
+         v1,
+         v2,
+       )
+     }
+   });
+   let out = Stdio.Out_channel.create("out.dot");
+   Gv.output_graph(out, acc.g);
+   Stdio.Out_channel.close(out);
+   (new substitute_types)#program(subst, prg);
+   */
 };

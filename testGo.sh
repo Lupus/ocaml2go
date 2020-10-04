@@ -7,7 +7,7 @@ export DUNE_CACHE=disabled
 dune build bin/main.exe
 export OCAML2GO="$PWD/_build/default/bin/main.exe"
 
-for test in hello_world
+for test in hindley_milner_lang
 #for test in hello_world loop_labels ocaml_lib_tests btree huffman nbody strings polymorphism mutual_references hindley_milner_lang
 do
   echo
@@ -19,7 +19,7 @@ do
   js_of_ocaml \
 	--enable excwrap \
 	--enable wrapped-exceptions  \
-	--opt 3 \
+	--no-inline \
 	--disable shortvar \
 	--disable simplify_ifdecl \
 	--pretty \
