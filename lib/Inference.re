@@ -402,9 +402,12 @@ class collect_constraints = {
         acc;
       | UFloatToInt =>
         G.add_edge(acc.g, e_v, G.Vertex.of_typ(TFloat));
-        G.add_edge(acc.g, expr_v, G.Vertex.of_typ(TString));
+        G.add_edge(acc.g, expr_v, G.Vertex.of_typ(TInt));
         acc;
-
+      | UIntToFloat =>
+        G.add_edge(acc.g, e_v, G.Vertex.of_typ(TInt));
+        G.add_edge(acc.g, expr_v, G.Vertex.of_typ(TFloat));
+        acc;
       | UBnot =>
         G.add_edge(acc.g, e_v, G.Vertex.of_typ(TInt));
         G.add_edge(acc.g, expr_v, G.Vertex.of_typ(TInt));
